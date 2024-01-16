@@ -11,5 +11,4 @@ def plot_learning_curve(n_games, scores):
         running_avg[i] = np.mean(scores[max(0, i-100):(i+1)])
     plt.plot(x, running_avg)
     plt.title('Running average of previous 100 scores')
-    # plt.savefig(figure_file)
     plt.show()
