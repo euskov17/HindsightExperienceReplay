@@ -96,10 +96,10 @@ class SoftActorCritic:
         self.optimizer_critic2 = torch.optim.Adam(self.critic2.parameters(), lr=lr)
 
     def choose_action(self, observation):
-        if len(observation.shape) == 1:
-            observation = [observation]
-        state = torch.tensor(observation, device=self.device, dtype=torch.float)
-        return self.actor.get_action(state).squeeze(-1)
+        # if len(observation.shape) == 1:
+        #     observation = [observation]
+        state = torch.tensor([observation], device=self.device, dtype=torch.float32)
+        return self.actor.get_action(state).squeeze(0)
     
     def __update_network_parameters(self, model, target_model):
         for param, target_param in zip(model.parameters(), target_model.parameters()):
@@ -142,10 +142,10 @@ class SoftActorCritic:
     def learning_step(self, batch):
         states, actions, rewards, next_states, dones = batch
         with torch.no_grad():
-            states = torch.tensor(states, device=self.device, dtype=torch.float) 
-            actions = torch.tensor(actions, device=self.device, dtype=torch.float) 
-            rewards = torch.tensor(rewards, device=self.device, dtype=torch.float) 
-            next_states = torch.tensor(next_states, device=self.device, dtype=torch.float) 
+            states = torch.tensor(states, device=self.device, dtype=torch.float32) 
+            actions = torch.tensor(actions, device=self.device, dtype=torch.float32) 
+            rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32) 
+            next_states = torch.tensor(next_states, device=self.device, dtype=torch.float32) 
             dones = torch.tensor(dones, device=self.device, dtype=torch.int)
 
         target_critic = self.__compute_critic_value(rewards, next_states, dones)

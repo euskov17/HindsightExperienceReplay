@@ -19,7 +19,7 @@ class ReplayBuffer(object):
         else:
             self._storage[self._next_idx] = data
         self._next_idx = (self._next_idx + 1) % self._maxsize
-
+        
     def sample(self, batch_size):
         batch = random.sample(self._storage, batch_size)
         return tuple(map(np.array, zip(*batch)))
