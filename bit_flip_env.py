@@ -41,18 +41,11 @@ class BitFlipEnv:
     def step(self, action):
         assert 0 <= action < self.num_bits
 
-        old_obs = self.observation 
-        self.observation[action] = 1 - self.observation[action]
+        self.observation[action] ^= 1# - self.observation[action]
         
-        # print((old_obs != self.observation))
-        # print(self.observation)
         done = np.allclose(self.observation, self.goal)
-        # if done:
-        #     print("Success")
-        # else:
-        #     dist = (self.observation != self.goal).sum()
-        #     print(f"Distance = {dist}")
-        reward = done - 1
+
+        reward = 0 if done else -1
 
         next_state = self.get_state()
         return next_state, reward, done, {}, {}
