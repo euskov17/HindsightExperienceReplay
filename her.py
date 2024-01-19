@@ -96,6 +96,49 @@ class HindsightExperienceReplay:
                 #     nextgoal = np.concatenate([next_obs, current_goal], -1)
                 #     self.buffer.add(stategoal, action, reward, nextgoal, done)
 
+        # for episode in range(num_episodes):
+        #     # Run episode and cache trajectory
+        #     episode_trajectory = []
+        #     dct = self.env.reset()[0]
+        #     goal = dct['desired_goal']
+        #     state = dct['observation']
+        #     for step in range(self.max_steps):
+
+        #         state_ = np.concatenate((state, goal))
+        #         action = self.agent.choose_action(state_)
+        #         next_state, reward, done, _, _ = self.env.step(action)
+        #         episode_trajectory.append((state, action, reward, next_state['observation'], done))
+        #         state = next_state['observation']
+        #         if done:
+        #             successes += 1
+        #             break
+
+        #     # Fill up replay memory
+        #     steps_taken = step
+        #     for t in range(steps_taken):
+
+        #         # Standard experience replay
+        #         state, action, reward, next_state, done = episode_trajectory[t]
+        #         state_, next_state_ = np.concatenate((state, goal)), np.concatenate((next_state, goal))
+        #         self.buffer.add(state_, action, reward, next_state_, done)
+
+        #         # Hindsight experience replay
+        #         if not her:
+        #             continue
+
+        #         for _ in range(4):
+        #             future = random.randint(t, steps_taken)  # index of future time step
+        #             new_goal = episode_trajectory[future][3]  # take future next_state and set as goal
+                    
+        #             new_done = np.allclose(next_state, new_goal)
+        #             new_reward = 0 if new_done else -1
+        #             # new_reward, new_done = self.env.compute_reward(next_state, new_goal)
+                    
+        #             state_, next_state_ = np.concatenate((state, new_goal)), np.concatenate((next_state, new_goal))
+        #             self.buffer.add(state_, action, new_reward, next_state_, new_done)
+
+
+
         if len(self.buffer) < self.train_start:
             return score, success / num_episodes
 
