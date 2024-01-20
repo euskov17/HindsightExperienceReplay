@@ -39,7 +39,7 @@ class DQN:
         self.target_model = DuelingQNetwork(state_dim, n_actions, hidden_size)
         self.update_network_parameters()
 
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-4)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.001)
         self.epsilon = 0.2
 
     def update_network_parameters(self):
@@ -50,30 +50,37 @@ class DQN:
 
     def choose_action(self, state):
         if np.random.rand() < self.epsilon:
-            return np.random.randint(0, self.n_actions)
+            return torch.randint(0, self.n_actions, size=())
         
-        state = torch.tensor(state, dtype=torch.float)
+        # state = torch.tensor(state, dtype=torch.float)
         with torch.no_grad():
-            return (self.model(state)).argmax().numpy().item()
+            return (self.model(state)).argmax()#.numpy().item()
     
     def learning_step(self, batch):
-        states, actions, rewards, next_states, dones = batch
+        # print(*zip(*batch))
+        states, actions, rewards, next_states, dones = zip(*batch)
         batch_size = len(dones)
 
-        states = torch.tensor(states, dtype=torch.float)
-        actions = torch.tensor(actions, dtype=torch.int)
-        rewards = torch.tensor(rewards, dtype=torch.float)
-        next_states = torch.tensor(next_states, dtype=torch.float)
-        dones = torch.tensor(dones, dtype=torch.float)
+        states = torch.stack(states)
+        actions = torch.stack(actions)
+        rewards = torch.stack(rewards)
+        next_states = torch.stack(next_states)
+        not_dones = ~torch.tensor(dones, dtype=torch.bool)
   
         q_values = self.model(states)[range(batch_size), actions]
 
+        # next_state_values = torch.zeros(batch_size)
         with torch.no_grad():
+            # target_actions = self.model(next_states[not_dones]).argmax(-1)
+            # target_q_values = self.target_model(next_states[not_dones])
+            # next_state_values[not_dones] = target_q_values[
+            #     range(not_dones.sum()), target_actions]
             target_actions = self.model(next_states).argmax(-1)
             target_q_values = self.target_model(next_states)
-            next_state_values = target_q_values[range(batch_size), target_actions]
+            next_state_values = target_q_values[
+                range(batch_size), target_actions]
             
-        q_target = rewards + (1 - dones) * self.gamma * next_state_values
+        q_target = rewards + not_dones * self.gamma * next_state_values
 
         self.optimizer.zero_grad()
         loss = F.mse_loss(q_values, q_target)
@@ -112,7 +119,8 @@ class DQNAgent:
             return self.Q_network(state).argmax()
 
     def learning_step(self, batch):
-        states, actions, rewards, next_states, dones = batch
+        print(tuple(*zip(*batch)))
+        states, actions, rewards, next_states, dones = tuple(*zip(*batch))
         batch_size = len(dones)
 
         # state_batch = torch.tensor(states, dtype=torch.float)
@@ -121,11 +129,11 @@ class DQNAgent:
         # next_states = torch.tensor(next_states, dtype=torch.float)
         # dones = torch.tensor(dones, dtype=bool)
   
-        state_batch = torch.tensor(states, dtype=torch.float)
-        action_batch = torch.tensor(actions, dtype=torch.int)
-        reward_batch = torch.tensor(rewards, dtype=torch.float)
-        non_final_mask = ~torch.tensor(dones, dtype=bool)
-        next_states = torch.tensor(next_states, dtype=torch.float)
+        state_batch = torch.stack(states, dtype=torch.float)
+        action_batch = torch.stack(actions, dtype=torch.int)
+        reward_batch = torch.stack(rewards, dtype=torch.float)
+        non_final_mask = ~torch.stack(dones, dtype=bool)
+        next_states = torch.stack(next_states, dtype=torch.float)
         non_final_next_states = next_states[non_final_mask]
 
         Q_values = self.Q_network(state_batch)[range(batch_size), action_batch]
