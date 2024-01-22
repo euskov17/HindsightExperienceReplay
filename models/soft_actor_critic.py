@@ -67,13 +67,13 @@ class SAC_Actor(nn.Module):
     def get_action(self, states):
         with torch.no_grad():
             states_torch = torch.Tensor(states)
-            actions = self.apply(states_torch)[0].clamp(-1, 1).numpy()
+            actions = self.apply(states_torch)[0].clamp(-1, 1)#.numpy()
             return actions    
         
 
 class SoftActorCritic:
     def __init__(self, state_dim, action_dim, hidden_size=128, scale_action=1,
-                 *, device=torch.device('cpu'), alpha=0.2, lr=3e-4, tau=5e-4, gamma=0.99,
+                 *, device=torch.device('cpu'), alpha=0.2, lr=5e-4, tau=.05, gamma=0.99,
                  max_grad_norm=10):
         self.scale_action = scale_action
         self.alpha = alpha
@@ -98,12 +98,13 @@ class SoftActorCritic:
     def choose_action(self, observation):
         # if len(observation.shape) == 1:
         #     observation = [observation]
-        state = torch.tensor([observation], device=self.device, dtype=torch.float32)
-        return self.actor.get_action(state).squeeze(0)
+        # state = torch.tensor([observation], device=self.device, dtype=torch.float32)
+        return self.actor.get_action(observation)#.squeeze(0)
     
     def __update_network_parameters(self, model, target_model):
         for param, target_param in zip(model.parameters(), target_model.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+        # target_model.load_state_dict(model.state_dict())
 
     def update_network_parameters(self):
         self.__update_network_parameters(self.critic1, self.target_critic1)
@@ -119,12 +120,12 @@ class SoftActorCritic:
                       self.target_critic2]:
             model.load_checkpoint()
 
-    def __compute_critic_value(self, rewards, next_states, done, reparametrize=True):
+    def __compute_critic_value(self, rewards, next_states, not_done, reparametrize=True):
         with torch.no_grad():
             actions, log_probs = self.actor.apply(next_states)
             q1 = self.critic1(next_states, actions)
             q2 = self.critic2(next_states, actions)
-            critic_target = rewards + self.gamma * (1 - done) * torch.min(q1, q2)
+            critic_target = rewards + self.gamma * not_done * torch.min(q1, q2)
             critic_target -= self.alpha * log_probs        
         return critic_target 
 
@@ -144,15 +145,18 @@ class SoftActorCritic:
     
 
     def learning_step(self, batch):
-        states, actions, rewards, next_states, dones = batch
+        # states, actions, rewards, next_states, dones = batch
+        states, actions, rewards, next_states, dones = zip(*batch)
+        # batch_size = len(dones)
         with torch.no_grad():
-            states = torch.tensor(states, device=self.device, dtype=torch.float32) 
-            actions = torch.tensor(actions, device=self.device, dtype=torch.float32) 
-            rewards = torch.tensor(rewards, device=self.device, dtype=torch.float32) 
-            next_states = torch.tensor(next_states, device=self.device, dtype=torch.float32) 
-            dones = torch.tensor(dones, device=self.device, dtype=torch.int)
+            states = torch.stack(states)
+            actions = torch.stack(actions)
+            rewards = torch.stack(rewards)
+            next_states = torch.stack(next_states)
+            not_dones = ~torch.tensor(dones, dtype=torch.bool)
+  
 
-        target_critic = self.__compute_critic_value(rewards, next_states, dones)
+        target_critic = self.__compute_critic_value(rewards, next_states, not_dones)
         critic1_loss = F.mse_loss(self.critic1(states, actions), target_critic)
         self.__optimize(self.critic1, self.optimizer_critic1, critic1_loss)
 

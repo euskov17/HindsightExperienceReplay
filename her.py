@@ -50,7 +50,7 @@ class HindsightExperienceReplay:
                 stategoal = torch.cat([obs, goal], -1)
                 action = self.agent.choose_action(stategoal)
                 
-                next_state, reward, done, _, _ = self.env.step(action.item())
+                next_state, reward, done, _, _ = self.env.step(action.numpy())
                 score += reward
                 
                 next_obs = torch.tensor(next_state['observation'], dtype=torch.float)
