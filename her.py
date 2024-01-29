@@ -25,7 +25,8 @@ class RandomStrategy:
 
 class HindsightExperienceReplay:
     def __init__(self, env, agent, buffer, strategy=FutureStrategy(), 
-                 max_steps=64, batch_size=64, learning_freq=40, train_start=1000):
+                 max_steps=64, batch_size=64, learning_freq=40, train_start=1000,
+                 one_goal_task=None, epsilon=.3):
         self.env = env
         self.agent = agent
         self.strategy = strategy
@@ -34,6 +35,26 @@ class HindsightExperienceReplay:
         self.batch_size = batch_size
         self.learning_freq = learning_freq
         self.train_start = train_start
+        self.goal = one_goal_task
+        self.epsilon = epsilon
+
+    def test(self, n_tests=10):
+        with torch.no_grad():
+            success_rate = 0.0
+            for _ in range(n_tests):
+                state = self.env.reset()[0]
+                desired_goal = state['desired_goal']
+                obs = torch.tensor(state['observation'], dtype=torch.float)
+                goal = torch.tensor(desired_goal, dtype=torch.float)
+                for _ in range(self.max_steps):
+                    sg = torch.cat([obs, goal], -1)
+                    action = self.agent.choose_action(sg)
+                    next_state, _, done, _, _ = self.env.step(action.numpy())
+                    if done:
+                        success_rate += 1
+                        break
+                    obs = torch.tensor(next_state['observation'], dtype=torch.float)
+            return success_rate / n_tests
 
     def play_and_learn(self, num_episodes=16, her=True):
         score = 0.0
@@ -42,26 +63,36 @@ class HindsightExperienceReplay:
             episode = []
             achived_goals = []
             state = self.env.reset()[0]
-            goal = state['desired_goal']
-            goal = torch.tensor(goal, dtype=torch.float)
+            desired_goal = state['desired_goal']
+            if self.goal is not None:
+                desired_goal = self.goal
+            goal = torch.tensor(desired_goal, dtype=torch.float)
             
             for step in range(self.max_steps):
                 obs = torch.tensor(state['observation'], dtype=torch.float)
                 stategoal = torch.cat([obs, goal], -1)
-                action = self.agent.choose_action(stategoal)
+                if np.random.rand() < self.epsilon:
+                    action = torch.tensor(self.env.action_space.sample(), dtype=torch.float)
+                else:
+                    action = self.agent.choose_action(stategoal, train=True)
                 
-                next_state, reward, done, _, _ = self.env.step(action.numpy())
+                next_state, reward, done, _, info = self.env.step(action.numpy())
+                if self.goal is not None:
+                    reward = self.env.compute_reward(next_state['achieved_goal'], 
+                                                           desired_goal,
+                                                           {})
+                    done = reward != -1.0
                 score += reward
                 
                 next_obs = torch.tensor(next_state['observation'], dtype=torch.float)
                 achived_goal = torch.tensor(next_state['achieved_goal'], dtype=torch.float)
                 reward = torch.tensor(reward, dtype=torch.float)
 
-                episode.append((obs, action, reward, next_obs, done))
+                episode.append((obs, action, reward, next_obs, done, info))
                 achived_goals.append(achived_goal)
 
-                # nextgoal = torch.cat([next_obs, goal], -1)
-                # self.buffer.add(stategoal, action, reward, nextgoal, done)
+                nextgoal = torch.cat([next_obs, goal], -1)
+                self.buffer.add(stategoal, action, reward, nextgoal, done)
 
                 state = next_state
                 
@@ -77,13 +108,13 @@ class HindsightExperienceReplay:
 
             for i in range(step_taken):
                 additional_goals = self.strategy.sample(i, achived_goals)
-                obs, action, reward, next_obs, done = episode[i]
+                obs, action, reward, next_obs, done, info = episode[i]
                 achived_goal = achived_goals[i]
 
                 #add achived goal
-                sa = torch.cat([obs, goal], -1)
-                na = torch.cat([next_obs, goal], -1)
-                self.buffer.add(sa, action, reward, na, done)
+                # sa = torch.cat([obs, goal], -1)
+                # na = torch.cat([next_obs, goal], -1)
+                # self.buffer.add(sa, action, reward, na, done)
                 #add another goals
 
                 # for _ in range(4):
@@ -97,8 +128,12 @@ class HindsightExperienceReplay:
 
 
                 for current_goal in additional_goals:
-                    done = torch.equal(achived_goal, current_goal)
-                    reward = torch.tensor(0.0 if done else -1.0, dtype=torch.float)
+                    # done = torch.equal(achived_goal, current_goal)
+                    # reward = torch.tensor(0.0 if done else -1.0, dtype=torch.float)
+                    reward = torch.tensor(self.env.compute_reward(
+                                                    achived_goal, 
+                                                    current_goal, info))
+                    done = reward != -1.0
                     stategoal = torch.cat([obs, current_goal], -1)
                     nextgoal = torch.cat([next_obs, current_goal], -1)
                     self.buffer.add(stategoal, action, reward, nextgoal, done)

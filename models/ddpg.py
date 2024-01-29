@@ -10,6 +10,7 @@ class Critic(nn.Module):
         super().__init__()        
 
         self.model = nn.Sequential(
+            # nn.LayerNorm(state_dim + action_dim),
             nn.Linear(state_dim + action_dim, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
@@ -24,10 +25,11 @@ class Critic(nn.Module):
         
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size=64,
-                 sigma=.001, actions_low=-1.0, actions_high=1.0):
+                 sigma=.2, max_action=1.0):
         super().__init__()        
 
         self.model = nn.Sequential(
+            # nn.LayerNorm(state_dim),
             nn.Linear(state_dim, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
@@ -37,39 +39,37 @@ class Actor(nn.Module):
         )
         self.sigma = sigma
         
-        self.low = actions_low
-        self.high = actions_high
-        self.noise = torch.distributions.Normal(torch.zeros(action_dim), 
-                                                torch.eye(action_dim) * sigma)
+        self.low = -max_action
+        self.high = max_action
+        self.max_action = max_action
+        self.noise = torch.distributions.Normal(torch.zeros(action_dim), sigma)
     
     def forward(self, states):
         return self.model(states)
     
     def get_best_actions(self, states, noise=False):
-        actions = self.model(states)
+        actions = self.model(states) * self.max_action
         if noise:
             actions += self.noise.sample().squeeze(0)
         return actions.clamp(min=self.low, max=self.high) 
     
 
 class DDPG:
-    def __init__(self, state_dim, action_dim, hidden_size=64, scale_action=1,
+    def __init__(self, state_dim, action_dim, hidden_size=64, 
                  *, device=torch.device('cpu'), alpha=0.2, lr=1e-3, tau=.5, gamma=0.99,
-                 max_grad_norm=10, sigma=0.001,
-                 action_low=-1.0, action_high=1.0):
-        self.scale_action = scale_action
+                 max_grad_norm=10, sigma=0.2,
+                 max_action=1.0):
         self.alpha = alpha
         self.gamma = gamma
         self.tau = tau
         self.max_grad_norm = max_grad_norm
         self.device = device
-        self.action_low = action_low
-        self.action_high = action_high
-        self.noise = torch.distributions.Normal(torch.zeros(action_dim), torch.eye(action_dim) * sigma)
+        self.action_low = -max_action
+        self.action_high = max_action
+        # self.noise = torch.distributions.Normal(torch.zeros(action_dim), torch.eye(action_dim) * sigma)
 
         self.actor = Actor(state_dim, action_dim, hidden_size, 
-                            actions_low=action_low,
-                            actions_high=action_high)
+                            max_action=max_action, sigma=sigma)
         self.target_actor = deepcopy(self.actor)
 
         self.critic = Critic(state_dim, action_dim, hidden_size).to(device)
@@ -78,10 +78,9 @@ class DDPG:
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, train=False):
         with torch.no_grad():
-            return self.actor.get_best_actions(observation, noise=True)
-    
+            return self.actor.get_best_actions(observation, noise=train)
 
     def __update_network_parameters(self, model, target_model):
         for param, target_param in zip(model.parameters(), target_model.parameters()):
@@ -125,10 +124,12 @@ class DDPG:
             target_actions = self.target_actor.get_best_actions(next_states)
             next_state_values = self.target_critic(next_states, target_actions)
             
-        q_target = rewards + not_dones * self.gamma * next_state_values
+            q_target = rewards + not_dones * self.gamma * next_state_values
+            q_target = torch.clamp(q_target, -1.0 / (1.0 - self.gamma), 0)
 
         qloss = F.mse_loss(q_values, q_target)
         self.__optimize(self.critic, self.critic_optimizer, qloss)
 
-        policy_loss = -self.critic(states, self.actor.get_best_actions(states))
+        best_actions = self.actor.get_best_actions(states)
+        policy_loss = -self.critic(states, best_actions) + (best_actions ** 2).mean()
         self.__optimize(self.actor, self.actor_optimizer, policy_loss)

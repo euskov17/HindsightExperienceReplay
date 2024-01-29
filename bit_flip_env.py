@@ -1,11 +1,18 @@
 import numpy as np
 
+class BitFlipActionSpace:
+    def __init__(self, n_bits):
+        self.n_bits = n_bits
+    
+    def sample(self):
+        return np.random.randint(0, self.n_bits, size=())
 
 class BitFlipEnv:
     def __init__(self, num_bits=10):
         self.num_bits = num_bits
         self.observation = self.random_state()
         self.goal = self.random_state()
+        self.action_space = BitFlipActionSpace(num_bits)
 
     def random_state(self):
         return np.random.randint(0, 2, size=self.num_bits)
@@ -16,6 +23,7 @@ class BitFlipEnv:
             'achieved_goal' : self.observation,
             'desired_goal' : self.goal
         }
+    
     
     @property
     def n_actions(self):
@@ -37,11 +45,16 @@ class BitFlipEnv:
         self.observation = self.random_state()
         self.goal = self.random_state()
         return (self.get_state(), {})
+    
+    def compute_reward(self, achived_goal, desired_goal, info):
+        done = np.allclose(achived_goal, desired_goal)
+        reward = 0 if done else -1
+        return reward
 
     def step(self, action):
         assert 0 <= action < self.num_bits
-
-        self.observation[action] ^= 1# - self.observation[action]
+        action = int(action)
+        self.observation[action] ^= 1 # - self.observation[action]
         
         done = np.allclose(self.observation, self.goal)
 

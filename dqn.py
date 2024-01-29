@@ -48,21 +48,20 @@ class DQN:
         # for q_target_params, q_eval_params in zip(self.target_model.parameters(), self.model.parameters()):
         #     q_target_params.data.copy_(self.tau * q_eval_params + (1 - self.tau) * q_target_params)
 
-    def choose_action(self, state):
-        if np.random.rand() < self.epsilon:
-            return torch.randint(0, self.n_actions, size=())
+    def choose_action(self, state, train=False):
+        if train and np.random.rand() < self.epsilon:
+            return torch.randint(0, self.n_actions, size=()).int()
         
         # state = torch.tensor(state, dtype=torch.float)
         with torch.no_grad():
-            return (self.model(state)).argmax()#.numpy().item()
+            return (self.model(state)).argmax().int()#.numpy().item()
     
     def learning_step(self, batch):
         # print(*zip(*batch))
         states, actions, rewards, next_states, dones = zip(*batch)
         batch_size = len(dones)
-
         states = torch.stack(states)
-        actions = torch.stack(actions)
+        actions = torch.stack(actions).int()
         rewards = torch.stack(rewards)
         next_states = torch.stack(next_states)
         not_dones = ~torch.tensor(dones, dtype=torch.bool)

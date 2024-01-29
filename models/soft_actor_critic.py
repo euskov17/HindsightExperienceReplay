@@ -5,11 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size=64):
+    def __init__(self, state_dim, action_dim, hidden_size=256):
         super().__init__()        
 
         self.model = nn.Sequential(
             nn.Linear(state_dim + action_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -22,7 +24,7 @@ class Critic(nn.Module):
         return qvalues
 
 class SAC_Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size=64, 
+    def __init__(self, state_dim, action_dim, hidden_size=256, 
                  min_value=-2, max_value=20, epsilon=1e-5):
         super().__init__()        
 
@@ -31,11 +33,15 @@ class SAC_Actor(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
             nn.Linear(hidden_size, action_dim)
         )
 
         self.model_sigma = nn.Sequential(
             nn.Linear(state_dim, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -73,7 +79,7 @@ class SAC_Actor(nn.Module):
 
 class SoftActorCritic:
     def __init__(self, state_dim, action_dim, hidden_size=128, scale_action=1,
-                 *, device=torch.device('cpu'), alpha=0.2, lr=5e-4, tau=.05, gamma=0.99,
+                 *, device=torch.device('cpu'), alpha=0.01, lr=5e-4, tau=.05, gamma=0.99,
                  max_grad_norm=10):
         self.scale_action = scale_action
         self.alpha = alpha
@@ -95,7 +101,7 @@ class SoftActorCritic:
         self.optimizer_critic1 = torch.optim.Adam(self.critic1.parameters(), lr=lr)
         self.optimizer_critic2 = torch.optim.Adam(self.critic2.parameters(), lr=lr)
 
-    def choose_action(self, observation):
+    def choose_action(self, observation, train=True):
         # if len(observation.shape) == 1:
         #     observation = [observation]
         # state = torch.tensor([observation], device=self.device, dtype=torch.float32)

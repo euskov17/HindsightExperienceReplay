@@ -34,7 +34,7 @@ class HindsightExperienceReplay:
         self.learning_freq = learning_freq
         self.train_start = train_start
 
-    def play_and_learn(self, num_episodes=16, her=True, epsilon=.2):
+    def play_and_learn(self, num_episodes=16, her=True):
         score = 0.0
         success = 0
         for _ in range(num_episodes):
@@ -47,10 +47,7 @@ class HindsightExperienceReplay:
             for step in range(self.max_steps):
                 obs = torch.tensor(state['observation'], dtype=torch.float)
                 stategoal = torch.cat([obs, goal], -1)
-                if np.random.rand() < epsilon:
-                    action = torch.tensor(self.env.action_space.sample(), dtype=torch.float)
-                else:
-                    action = self.agent.choose_action(stategoal)
+                action = self.agent.choose_action(stategoal)
                 
                 next_state, reward, done, _, _ = self.env.step(action.numpy())
                 score += reward
