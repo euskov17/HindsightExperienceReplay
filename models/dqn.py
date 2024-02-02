@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from base_networks import MLPLayer
+from .base_networks import MLPLayer
 
 class DuelingQNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_size):

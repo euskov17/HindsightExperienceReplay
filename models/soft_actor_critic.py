@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.base_networks import Critic, MLPLayer
+from .base_networks import Critic, MLPLayer
 
 class SAC_Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size=256, 
