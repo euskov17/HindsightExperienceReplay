@@ -1,4 +1,5 @@
 import numpy as np
+from gymnasium.spaces import Discret, Box
 
 class BitFlipActionSpace:
     def __init__(self, n_bits):
@@ -10,40 +11,22 @@ class BitFlipActionSpace:
 class BitFlipEnv:
     def __init__(self, num_bits=10):
         self.num_bits = num_bits
-        self.observation = self.random_state()
-        self.goal = self.random_state()
-        self.action_space = BitFlipActionSpace(num_bits)
+        self.observation_space = Box(low=0, high=1, shape=(num_bits,), dtype=np.int8)
+        self.action_space = Discret(num_bits)
 
-    def random_state(self):
-        return np.random.randint(0, 2, size=self.num_bits)
+        self.observation = self.observation_space.sample()
+        self.goal = self.observation_space.sample()
 
     def get_state(self):
         return {
-            'observation' : self.observation,
-            'achieved_goal' : self.observation,
-            'desired_goal' : self.goal
+            'observation' : self.observation.copy(),
+            'achieved_goal' : self.observation.copy(),
+            'desired_goal' : self.goal.copy()
         }
-    
-    
-    @property
-    def n_actions(self):
-        return self.num_bits
-    
-    @property
-    def state_dim(self):
-        return self.num_bits
-    
-    @property
-    def start(self):
-        return self.observation
-    
-    @property
-    def finish(self):
-        return self.goal
-
+        
     def reset(self):
-        self.observation = self.random_state()
-        self.goal = self.random_state()
+        self.observation = self.observation_space.sample()
+        self.goal = self.observation_space.sample()
         return (self.get_state(), {})
     
     def compute_reward(self, achived_goal, desired_goal, info):
