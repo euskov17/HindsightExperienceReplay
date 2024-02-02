@@ -4,51 +4,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size=64):
-        super().__init__()        
-
-        self.model = nn.Sequential(
-            nn.Linear(state_dim + action_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 1)
-        )
-
-    def forward(self, states, actions):
-        sa = torch.cat([states, actions], dim=-1)
-        qvalues = self.model(sa).squeeze()    
-        return qvalues
+from models.base_networks import Critic, MLPLayer
 
 class SAC_Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_size=64, 
+    def __init__(self, state_dim, action_dim, hidden_size=256, 
                  min_value=-2, max_value=20, epsilon=1e-5):
         super().__init__()        
-
-        self.model_mu = nn.Sequential(
-            nn.Linear(state_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, action_dim)
-        )
-
-        self.model_sigma = nn.Sequential(
-            nn.Linear(state_dim, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, action_dim)
-        )
+        
+        self.model = MLPLayer(state_dim, hidden_size, hidden_size)
+        self.mu = nn.Linear(hidden_size, action_dim)
+        self.sigma = nn.Linear(hidden_size, action_dim)
 
         self.min_value = min_value
         self.max_value = max_value 
         self.epsilon = epsilon
     
     def apply(self, states): 
-        mu = self.model_mu(states)
-        sigma = self.model_sigma(states)
+        out = self.model(states)
+        mu = self.mu(out)
+        sigma = self.sigma(out)
 
         sigma = torch.clamp(sigma, min=self.min_value, max=self.max_value)
         sigma = F.softplus(sigma)
@@ -67,13 +41,13 @@ class SAC_Actor(nn.Module):
     def get_action(self, states):
         with torch.no_grad():
             states_torch = torch.Tensor(states)
-            actions = self.apply(states_torch)[0].clamp(-1, 1)#.numpy()
+            actions = self.apply(states_torch)[0].clamp(-1, 1)
             return actions    
         
 
 class SoftActorCritic:
     def __init__(self, state_dim, action_dim, hidden_size=128, scale_action=1,
-                 *, device=torch.device('cpu'), alpha=0.2, lr=5e-4, tau=1e-3, gamma=0.99,
+                 *, device=torch.device('cpu'), alpha=0.01, lr=5e-4, tau=.05, gamma=0.99,
                  max_grad_norm=10):
         self.scale_action = scale_action
         self.alpha = alpha
@@ -95,16 +69,12 @@ class SoftActorCritic:
         self.optimizer_critic1 = torch.optim.Adam(self.critic1.parameters(), lr=lr)
         self.optimizer_critic2 = torch.optim.Adam(self.critic2.parameters(), lr=lr)
 
-    def choose_action(self, observation):
-        # if len(observation.shape) == 1:
-        #     observation = [observation]
-        # state = torch.tensor([observation], device=self.device, dtype=torch.float32)
-        return self.actor.get_action(observation)#.squeeze(0)
+    def choose_action(self, observation, train=True):
+        return self.actor.get_action(observation)
     
     def __update_network_parameters(self, model, target_model):
-        # for param, target_param in zip(model.parameters(), target_model.parameters()):
-        #     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
-        target_model.load_state_dict(model.state_dict())
+        for param, target_param in zip(model.parameters(), target_model.parameters()):
+            target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
     def update_network_parameters(self):
         self.__update_network_parameters(self.critic1, self.target_critic1)
@@ -145,9 +115,7 @@ class SoftActorCritic:
     
 
     def learning_step(self, batch):
-        # states, actions, rewards, next_states, dones = batch
         states, actions, rewards, next_states, dones = zip(*batch)
-        # batch_size = len(dones)
         with torch.no_grad():
             states = torch.stack(states)
             actions = torch.stack(actions)
