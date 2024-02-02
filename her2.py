@@ -9,8 +9,8 @@ class FutureStrategy:
         self.n_samples = n_samples
 
     def sample(self, num_episode, achived_goals):
-        # sz = min(len(achived_goals) - num_episode, self.n_samples)
-        return random.choices(achived_goals[num_episode:], k=self.n_samples) 
+        sz = min(len(achived_goals[num_episode:]), self.n_samples)
+        return random.choices(achived_goals[num_episode:], k=sz) 
     
 class FinalStrategy:
     def sample(self, num_episode, achived_goals):
@@ -29,18 +29,21 @@ class HER:
 
     def record(self, trajectory, achived_goals, buffer, compute_reward):
         steps = len(trajectory)
-        n = np.random.randint(0, steps)
-        idxes = np.random.randint(steps, size=n)
-        # idxes = range(steps)
+        # n = np.random.randint(0, steps)
+        # idxes = np.random.randint(steps, size=n)
+        idxes = range(steps)
         for idx in idxes:
             additional_goals = self.strategy.sample(idx, achived_goals)
             obs, action, reward, next_obs, done, info = trajectory[idx]
             achived_goal = achived_goals[idx]
 
             for current_goal in additional_goals:
+                # if np.random.random() > 1 - (1. / (1 + self.strategy.n_samples)):
+                #     continue
                 reward = torch.tensor(compute_reward(
                                       achived_goal, 
-                                      current_goal, info))
+                                      current_goal, 
+                                      None))
                 done = reward != -1.0
                 # print(f"Reward {reward}, done {done}")
                 stategoal = torch.cat([obs, current_goal], -1)
@@ -54,8 +57,29 @@ class Player:
         self.agent = agent
         self.buffer = buffer
 
+    def test_rollout(self, n_test_rollouts, max_steps=50):
+        success = 0.0
+        for _ in range(n_test_rollouts):
+            state = self.env.reset()[0]
+            desired_goal = state['desired_goal']
+            goal = torch.tensor(desired_goal, dtype=torch.float)
+            
+            for step in range(max_steps):
+                obs = torch.tensor(state['observation'], dtype=torch.float)
+                stategoal = torch.cat([obs, goal], -1)
+                action = self.agent.choose_action(stategoal, train=True)
+                next_state, reward, done, _, info = self.env.step(action.numpy())
+
+                assert reward == self.env.compute_reward(next_state['achieved_goal'], desired_goal, info)
+                state = next_state
+
+            success += info['is_success']
+
+        return success / n_test_rollouts
+
+
     def play_and_record(self, using_her=True, epsilon=.1, 
-                        num_episodes=16, max_steps=50):
+                        num_episodes=16, max_steps=50, train=True):
         success = 0.0
         score = 0.0
         her = HER() if using_her else None
@@ -69,20 +93,28 @@ class Player:
             for step in range(max_steps):
                 obs = torch.tensor(state['observation'], dtype=torch.float)
                 stategoal = torch.cat([obs, goal], -1)
-                if np.random.rand() < epsilon:
+                if train and np.random.rand() < epsilon:
                     action = torch.tensor(self.env.action_space.sample(), dtype=torch.float)
                     # print(action)
                 else:
-                    action = self.agent.choose_action(stategoal, train=True)
+                    action = self.agent.choose_action(stategoal, train=train)
                     # print(action)
                 
                 next_state, reward, done, _, info = self.env.step(action.numpy())
+
+                assert reward == self.env.compute_reward(next_state['achieved_goal'], desired_goal, info)
+
                 score += reward
                 
                 next_obs = torch.tensor(next_state['observation'], dtype=torch.float)
                 achived_goal = torch.tensor(next_state['achieved_goal'], dtype=torch.float)
                 reward = torch.tensor(reward, dtype=torch.float)
-                # done = bool(info['is_success'])
+                done = bool(info['is_success'])
+                
+                state = next_state
+
+                if not train:
+                    continue
 
                 episode.append((obs, action, reward, next_obs, done, info))
                 achived_goals.append(achived_goal)
@@ -90,7 +122,6 @@ class Player:
                 nextgoal = torch.cat([next_obs, goal], -1)
                 self.buffer.add(stategoal, action, reward, nextgoal, done)
 
-                state = next_state
                 # if info['is_success']:
                 #     print(reward, done, self.env.compute_reward(achived_goal, goal, info))
                     # print("it happens")
@@ -103,6 +134,9 @@ class Player:
             success += info['is_success']
             if not using_her:
                 continue
+
+            if not train:
+                continue
         
             her.record(episode, achived_goals, self.buffer,
                         self.env.compute_reward)
@@ -110,8 +144,12 @@ class Player:
         return score / num_episodes, success / num_episodes
 
     def update_agent(self, learning_freq=40, batch_size=128):
+        # if len(self.buffer) <= 1000:
+        #     return
         for _ in range(learning_freq):
             batch = self.buffer.sample(batch_size)
             self.agent.learning_step(batch)
+        # self.agent.update_network_parameters()
 
+    def update_network_parameters(self):
         self.agent.update_network_parameters()

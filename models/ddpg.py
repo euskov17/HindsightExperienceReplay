@@ -10,7 +10,7 @@ class Critic(nn.Module):
         super().__init__()        
 
         self.model = nn.Sequential(
-            # nn.LayerNorm(state_dim + action_dim),
+            # nn.BatchNorm1d(state_dim + action_dim, affine=False),
             nn.Linear(state_dim + action_dim, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
@@ -29,7 +29,7 @@ class Actor(nn.Module):
         super().__init__()        
 
         self.model = nn.Sequential(
-            # nn.LayerNorm(state_dim),
+            # nn.BatchNorm1d(state_dim, affine=False),
             nn.Linear(state_dim, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
@@ -48,16 +48,20 @@ class Actor(nn.Module):
         return self.model(states)
     
     def get_best_actions(self, states, noise=False):
+        if not noise:
+            # self.model.train()
+            actions = self.model(states) * self.max_action
+            return actions.clamp(min=self.low, max=self.high).squeeze(0)
+        # self.model.eval()
         actions = self.model(states) * self.max_action
-        if noise:
-            actions += self.noise.sample().squeeze(0)
-        return actions.clamp(min=self.low, max=self.high) 
+        actions += self.noise.sample().squeeze(0)
+        return actions.clamp(min=self.low, max=self.high).squeeze(0)
     
 
 class DDPG:
     def __init__(self, state_dim, action_dim, hidden_size=64, 
                  *, device=torch.device('cpu'), alpha=0.2, lr=1e-3, tau=.5, gamma=0.99,
-                 max_grad_norm=10, sigma=0.2,
+                 max_grad_norm=200, sigma=0.1,
                  max_action=1.0):
         self.alpha = alpha
         self.gamma = gamma
@@ -80,7 +84,7 @@ class DDPG:
 
     def choose_action(self, observation, train=False):
         with torch.no_grad():
-            return self.actor.get_best_actions(observation, noise=train)
+            return self.actor.get_best_actions(observation.unsqueeze(0), noise=train)
 
     def __update_network_parameters(self, model, target_model):
         for param, target_param in zip(model.parameters(), target_model.parameters()):

@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 
 from IPython.display import clear_output
 
-def plot_learning_curve(n_games, scores, name="algorithm", running=False):
+def plot_learning_curve(scores, name="algorithm", running=False):
     clear_output()
+    n_games = len(scores)
     x = range(1, n_games + 1)
     if running:
         running_avg = np.zeros(len(scores))
