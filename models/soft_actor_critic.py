@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.base_networks import Critic, MLPLayer
+from .base_networks import Critic, MLPLayer
 
 class SAC_Actor(nn.Module):
     def __init__(self, state_dim, action_dim, hidden_size=256, 
@@ -47,7 +47,7 @@ class SAC_Actor(nn.Module):
 
 class SoftActorCritic:
     def __init__(self, state_dim, action_dim, hidden_size=128, scale_action=1,
-                 *, device=torch.device('cpu'), alpha=0.01, lr=5e-4, tau=.05, gamma=0.99,
+                 *, device=torch.device('cpu'), alpha=0.2, lr=5e-4, tau=.05, gamma=0.99,
                  max_grad_norm=10):
         self.scale_action = scale_action
         self.alpha = alpha

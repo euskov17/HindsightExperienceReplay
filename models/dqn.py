@@ -3,7 +3,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from base_networks import MLPLayer
+from .base_networks import MLPLayer
 
 class DuelingQNetwork(nn.Module):
     def __init__(self, input_dim, output_dim, hidden_size):
@@ -18,7 +18,7 @@ class DuelingQNetwork(nn.Module):
         return value[..., None] + advantage
 
 class DQN:
-    def __init__(self, state_dim, n_actions, hidden_size=128, gamma=0.98,
+    def __init__(self, state_dim, n_actions, hidden_size=128, gamma=0.99,
                 lr=1e-3):
         self.state_dim = state_dim
         self.n_actions = n_actions
@@ -30,20 +30,19 @@ class DQN:
         self.update_network_parameters()
 
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        self.epsilon = 0.2
 
     def update_network_parameters(self):
         self.target_model.load_state_dict(self.model.state_dict())
 
     def choose_action(self, state, train=True):
-        if train and np.random.rand() < self.epsilon:
-            return torch.randint(0, self.n_actions, size=())
-        
         with torch.no_grad():
             return (self.model(state)).argmax()
     
     def learning_step(self, batch):
-        states, actions, rewards, next_states, dones = zip(*batch)
+        if len(batch) == 1:
+            states, actions, rewards, next_states, dones = batch[0]
+        else:    
+            states, actions, rewards, next_states, dones = zip(*batch)
         batch_size = len(dones)
 
         states = torch.stack(states)
